@@ -1,8 +1,6 @@
 import express from "express";
-import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import _ from "lodash";
-
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -31,31 +29,50 @@ const theTodolistDB = async () => {
     }
 };
 
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-app.get("/", async (req, res) => {
-    try {
-        const itemsList = await Item.find({});
-        if (itemsList.length === 0) {
-            await Promise.all([
-                item1.save(),
-                item2.save(),
-                item3.save()
-            ]);
-            console.log("Items are saved to database.");
-            res.redirect("/") // redirecting back home page after saving all three items in DB
+app.route("/")
+    .get(async (req, res) => {
+        try {
+            const itemsList = await Item.find({});
+            if (itemsList.length === 0) {
+                await Promise.all([
+                    item1.save(),
+                    item2.save(),
+                    item3.save()
+                ]);
+                console.log("Items are saved to database.");
+                res.redirect("/") // redirecting back home page after saving all three items in DB
+            } else {
+                res.render("index.ejs", {
+                    listTitle: "Today",
+                    newListItems: itemsList
+                });
+            };
+        } catch (error) {
+            console.error("Error fetching items:", error);
+            res.status(500).send("Internal Server Error");
+        }
+    })
+    .post(async (req, res) => {
+        if (req.body.list === "Today") {
+            await new Item({ name: req.body.newItem }).save();
+            res.redirect("/");
         } else {
-            res.render("index.ejs", {
-                listTitle: "Today",
-                newListItems: itemsList
-            });
-        };
-    } catch (error) {
-        console.error("Error fetching items:", error);
-        res.status(500).send("Internal Server Error");
-    }
-});
+            try {
+                const foundList = await List.findOne({ name: req.body.list });
+                if (foundList) {
+                    foundList.items.push({ name: req.body.newItem }); // Push the new item object
+                    await foundList.save();
+                    res.redirect("/" + req.body.list);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                res.status(500).send("Internal Server Error");
+            }
+        }
+    });
 
 app.get("/:customListName", async (req, res) => {
     const customListName = _.capitalize(req.params.customListName);
@@ -80,25 +97,6 @@ app.get("/:customListName", async (req, res) => {
     }
 });
 
-app.post("/", async (req, res) => {
-    if (req.body.list === "Today") {
-        await new Item({ name: req.body.newItem }).save();
-        res.redirect("/");
-    } else {
-        try {
-            const foundList = await List.findOne({ name: req.body.list });
-            if (foundList) {
-                foundList.items.push({ name: req.body.newItem }); // Push the new item object
-                await foundList.save();
-                res.redirect("/" + req.body.list);
-            }
-        } catch (error) {
-            console.error("Error:", error);
-            res.status(500).send("Internal Server Error");
-        }
-    }
-});
-
 app.post("/delete", async (req, res) => {
     const listName = req.body.listName;
     if (listName === "Today") {
@@ -117,7 +115,6 @@ app.post("/delete", async (req, res) => {
         }
     }
 });
-
 
 app.listen(port, async () => {
     await theTodolistDB();
